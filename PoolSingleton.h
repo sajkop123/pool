@@ -17,7 +17,7 @@ class global_pool {
   };
 
  public:
-  static global_pool<T>* instance() {
+  static global_pool<T>* instance () {
     static global_pool<T> instance;
     return &instance;
   }

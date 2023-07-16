@@ -14,7 +14,26 @@ struct Img : public Poolable<Img> {
   int mId;
 };
 
+void* operator new(size_t size) {
+  void *p = malloc(size);
+  MY_LOGD("allocate Poolable%p %zu",p , size);
+  return p;
+}
+
+void operator delete(void* p) {
+  MY_LOGD("free %p",p);
+  free(p);
+}
+
 int main() {
-  std::shared_ptr<Img> pImg;
-  pImg = make_shared<Img>(1);
+  // std::shared_ptr<Img> pImg;
+  // pImg = make_shared<Img>(1);
+
+  // int *p = new int(2);
+  // delete(p);
+
+  {
+    MY_LOGD("sizeof(global_pool<Img>)=%zu", sizeof(global_pool<Img>));
+    std::unique_ptr<Img> p = std::make_unique<Img>(1);
+  }
 }
