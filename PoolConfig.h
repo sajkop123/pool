@@ -1,4 +1,5 @@
 #include "common.h"
+#define TAG_LOG PoolConfig
 
 
 /**

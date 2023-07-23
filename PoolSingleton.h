@@ -1,4 +1,5 @@
 #include "common.h"
+#define TAG_LOG PoolSingleton
 
 #include <memory>
 #include <type_traits>
