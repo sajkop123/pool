@@ -59,7 +59,7 @@ struct Img {
   Img(Img&&) { MY_LOGD("move"); }
 
   int mId;
-  int a[5];
+  int a[2];
 };
 
 // template class sharedpool<Img>;
@@ -89,5 +89,6 @@ int main() {
   MY_LOGD("---------------------------------------------------------");
   spImg = nullptr;
   MY_LOGD("---------------------------------------------------------");
+
   return 0;
 }

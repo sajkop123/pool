@@ -24,7 +24,7 @@ void* MemoryPool3::allocate(size_t size) {
   }
 
   GlobalState& state = getGlobalState();
-  std::unique_lock<std::mutex> _l(state.sMutex);
+  // std::unique_lock<std::mutex> _l(state.sMutex);
   auto &dataInfo = state.map[size];
   if (!dataInfo.mMemory) {
     size_t mem_size = static_cast<size_t>(dataInfo.mCellSizeInBytes * CELL_NUMS);
@@ -45,15 +45,15 @@ void* MemoryPool3::allocate(size_t size) {
 
   unsigned char* p = dataInfo.mMemory.get();
   p = p + cellIndex * dataInfo.mCellSizeInBytes;
-  MY_LOGD("cellidx=%u p=0x%p, size=%zu",
-          cellIndex, dataInfo.mCellSizeInBytes);
+  MY_LOGD("cellidx=%u p=0x%p, size=%zu occupy(%llX/num=%u)",
+          cellIndex, p, dataInfo.mCellSizeInBytes,
+          dataInfo.mOccupationBits, dataInfo.mNumOccupiedCells);
   return reinterpret_cast<void*>(p);
 }
 
 void MemoryPool3::deallocate(void* p, size_t size) {
-  MY_LOGD("p=0x%p, size=%zu", p, size);
   GlobalState& state = getGlobalState();
-  std::unique_lock<std::mutex> _l(state.sMutex);
+  // std::unique_lock<std::mutex> _l(state.sMutex);
   auto &dataInfo = state.map[size];
   if (!dataInfo.mMemory) {
     MY_LOGD("ERROR: not owned memory");
@@ -65,7 +65,8 @@ void MemoryPool3::deallocate(void* p, size_t size) {
   uint32_t bit = ~(1ULL << bitPosOfCell);
   dataInfo.mOccupationBits &= bit;
   dataInfo.mNumOccupiedCells--;
-  MY_LOGD("cellIndex=%u", bitPosOfCell);
+  MY_LOGD("cellIndex=%u occupy(%llX/num=%u)",
+          bitPosOfCell, dataInfo.mOccupationBits, dataInfo.mNumOccupiedCells);
 }
 
 MemoryPool3::GlobalState& MemoryPool3::getGlobalState() {

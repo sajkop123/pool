@@ -1,4 +1,4 @@
-#include "MemoryPool3.h"
+#include "MemoryPool4.h"
 
 template<typename T>
 class simple_allocator {
@@ -45,14 +45,14 @@ class sharedpool_allocator {
 
   [[nodiscard]] T* allocate(size_t n) {
     MY_LOGD("+++ sizeof(T)=%zu", n*sizeof(T));
-    T* p = static_cast<T*>(MemoryPool3::allocate(n * sizeof(T)));
+    T* p = static_cast<T*>(MemoryPool4::allocate(n * sizeof(T)));
     MY_LOGD("--- p=0x%p, sizeof(T)=%zu", p, n*sizeof(T));
     return p;
   }
 
   void deallocate(T* p, size_t n) {
     MY_LOGD("p=0x%p, size=%zu", p, n*sizeof(T));
-    MemoryPool3::deallocate((void*)p, n*sizeof(T));
+    MemoryPool4::deallocate((void*)p, n*sizeof(T));
   }
 };
 
@@ -66,7 +66,7 @@ class sharedpool_deleter {
   void operator()(T* p) const noexcept {
     void* vp = static_cast<void*>(p);
     MY_LOGD("p=0x%p, size=%zu", p, sizeof(T));
-    MemoryPool3::deallocate(vp, sizeof(T));
+    MemoryPool4::deallocate(vp, sizeof(T));
   }
 };
 
@@ -76,18 +76,7 @@ class sharedpool {
   sharedpool() = default;
 
   std::shared_ptr<T> acquire() {
-    using MyAllocator = sharedpool_allocator<T>;
-    using MyDeleter = sharedpool_deleter<T>;
-    T* rawPtr = MyAllocator().allocate(1);
-    MyDeleter del;
-    MyAllocator alloc;
-    // Creating shared_ptr using the custom allocator and custom deleter
-    std::shared_ptr<T> p(
-        rawPtr,
-        del,
-        alloc
-    );
-    return p;
+    return std::allocate_shared<T>(malloc);
   }
 
  private:
