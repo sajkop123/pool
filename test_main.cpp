@@ -59,7 +59,7 @@ struct Img {
   Img(Img&&) { MY_LOGD("move"); }
 
   int mId;
-  // int a[10];
+  int a[5];
 };
 
 // template class sharedpool<Img>;
@@ -85,11 +85,9 @@ int main() {
   MY_LOGD("sizeof(Img)=%zu", sizeof(Img));
   sharedpool<Img> pool;
   MY_LOGD("---------------------------------------------------------");
-  std::shared_ptr<Img> spImg(pool.acquire());
+  std::shared_ptr<Img> spImg = pool.acquire();
   MY_LOGD("---------------------------------------------------------");
   spImg = nullptr;
   MY_LOGD("---------------------------------------------------------");
-
-  // MemoryPool2::shutdown();
   return 0;
 }
