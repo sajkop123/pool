@@ -48,6 +48,7 @@
 
 #include <vector>
 #include <iostream>
+#include <ctime>
 
 #include "common.h"
 #define LOG_TAG MAIN
@@ -59,36 +60,47 @@ struct Img {
   Img(Img&&) { MY_LOGD("move"); }
 
   int mId;
-  int a[2];
+  int a[20];
 };
 
-// template class sharedpool<Img>;
-// template class sharedpool_allocator<Img>;
-// template class sharedpool_deleter<Img>;
+const static size_t USER_SIZE = 100;
 
-// default std::bad_alloc exception throwing version
-// void* operator new(size_t size) {
-//   void* r = MemoryPool::allocate(size);
-//   return r;
-// }
-
-
-// void operator delete(void* data) {
-//   MemoryPool::deallocate(data, 0);
-// }
-
-// void operator delete(void* data, size_t size) {
-//   MemoryPool::deallocate(data, size);
-// }
+void test_StandardAllocDealloc() {
+  struct TestStruct_Tiny {
+    uint32_t thing1;
+  };
+  struct TestStruct_Medium {
+    uint32_t thing1[100];
+  };
+  struct TestStruct_Large {
+    uint32_t thing1[100000];
+  };
+}
 
 int main() {
   MY_LOGD("sizeof(Img)=%zu", sizeof(Img));
   sharedpool<Img> pool;
-  MY_LOGD("---------------------------------------------------------");
-  std::shared_ptr<Img> spImg = pool.acquire();
-  MY_LOGD("---------------------------------------------------------");
-  spImg = nullptr;
-  MY_LOGD("---------------------------------------------------------");
+  std::clock_t start, end;
+
+  start = clock();
+  {
+    std::shared_ptr<Img> spImg[USER_SIZE];
+    for (size_t i = 0; i < USER_SIZE; ++i) {
+      spImg[i] = pool.acquire();
+    }
+  }
+  end = clock();
+  printf("%d\n", end-start);
+
+  start = clock();
+  {
+    std::shared_ptr<Img> spImg[USER_SIZE];
+    for (size_t i = 0; i < USER_SIZE; ++i) {
+      spImg[i] = std::make_shared<Img>();
+    }
+  }
+  end = clock();
+  printf("%d\n", end-start);
 
   return 0;
 }
