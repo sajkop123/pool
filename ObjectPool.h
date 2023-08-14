@@ -1,5 +1,7 @@
 #include "MemoryPool4.h"
 
+#include <memory>
+
 template<typename T>
 class simple_allocator {
  public:
@@ -76,11 +78,18 @@ class sharedpool {
   sharedpool() = default;
 
   std::shared_ptr<T> acquire() {
-    return std::allocate_shared<T>(malloc);
+    return std::allocate_shared<T>(sharedpool_allocator<T>());
   }
 
  private:
-  sharedpool_deleter<T> mdel;
   sharedpool_allocator<T> malloc;
-  simple_allocator<T> msalloc;
+};
+
+namespace strm {
+  template<class _Tp, typename... _Args>
+    inline std::shared_ptr<_Tp>
+    make_shared(_Args&&... __args) {
+      return std::allocate_shared<_Tp>(sharedpool_allocator<_Tp>(),
+                  std::forward<_Args>(__args)...);
+    }
 };

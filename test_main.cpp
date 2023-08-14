@@ -55,6 +55,7 @@
 
 struct Img {
   Img() : mId(0) { MY_LOGD("ctor %d", mId); }
+  Img(int id) : mId(id) { MY_LOGD("ctor %d", mId); }
   ~Img() { MY_LOGD("dtor %d", mId); }
   Img(const Img&) { MY_LOGD("copy"); }
   Img(Img&&) { MY_LOGD("move"); }
@@ -63,7 +64,8 @@ struct Img {
   int a[20];
 };
 
-const static size_t USER_SIZE = 100;
+const static size_t TOTAL_SIZE = 100000;
+const static size_t USER_SIZE = 6;
 
 void test_StandardAllocDealloc() {
   struct TestStruct_Tiny {
@@ -82,25 +84,52 @@ int main() {
   sharedpool<Img> pool;
   std::clock_t start, end;
 
-  start = clock();
   {
+    start = clock();
     std::shared_ptr<Img> spImg[USER_SIZE];
-    for (size_t i = 0; i < USER_SIZE; ++i) {
-      spImg[i] = pool.acquire();
+    for (size_t i = 0; i < TOTAL_SIZE; ++i) {
+      spImg[i%USER_SIZE] = std::make_shared<Img>(i);
+      // std::shared_ptr<Img> p = std::make_shared<Img>(i);
     }
+    end = clock();
+    printf("%d\n", end-start);
   }
-  end = clock();
-  printf("%d\n", end-start);
+  {
+    start = clock();
+    std::shared_ptr<Img> spImg[USER_SIZE];
+    for (size_t i = 0; i < TOTAL_SIZE; ++i) {
+      spImg[i%USER_SIZE] = strm::make_shared<Img>(i);
+      // std::shared_ptr<Img> p = strm::make_shared<Img>(i);
+    }
+    end = clock();
+    printf("%d\n", end-start);
+  }
 
-  start = clock();
-  {
-    std::shared_ptr<Img> spImg[USER_SIZE];
-    for (size_t i = 0; i < USER_SIZE; ++i) {
-      spImg[i] = std::make_shared<Img>();
-    }
-  }
-  end = clock();
-  printf("%d\n", end-start);
+  // {
+  //   struct A {
+  //     A() { MY_LOGD("A::ctor(); "); }
+  //     ~A() { MY_LOGD("A::dtor(); "); }
+  //     int val = 0;
+  //   };
+  //   struct B {
+  //     B() { MY_LOGD("B::ctor(); "); }
+  //     ~B() { MY_LOGD("B::dtor(); "); }
+  //     std::shared_ptr<A> ma;
+  //     int val = 0;
+  //   };
+
+  //   {
+  //     std::shared_ptr<B> b = strm::make_shared<B>();
+  //     b->ma = strm::make_shared<A>();
+  //     b->val = 10;
+  //     b->ma->val = 20;
+  //     B* pb = b.get();
+  //     A* pa = b->ma.get();
+
+  //     b = nullptr;
+  //     MY_LOGD("val in B : %d, 0x%p, val in A : %d, 0x%p", pb->val, pb, pa->val, pa);
+  //   }
+  // }
 
   return 0;
 }
