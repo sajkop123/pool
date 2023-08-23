@@ -49,6 +49,7 @@
 #include <vector>
 #include <iostream>
 #include <ctime>
+#include <thread>
 
 #include "common.h"
 #define LOG_TAG MAIN
@@ -64,72 +65,77 @@ struct Img {
   int a[20];
 };
 
-const static size_t TOTAL_SIZE = 100000;
-const static size_t USER_SIZE = 6;
+const static size_t TOTAL_SIZE = 5;
+const static size_t USER_SIZE = 2;
 
-void test_StandardAllocDealloc() {
-  struct TestStruct_Tiny {
-    uint32_t thing1;
+template<typename FUNC, typename...Args>
+void run(size_t concurrency, size_t bound, FUNC&& func, Args... args) {
+  auto&& worker = [&]() {
+    for (size_t i = 0; i < bound; ++i) {
+      func(std::forward<Args>(args)...);
+    }
   };
-  struct TestStruct_Medium {
-    uint32_t thing1[100];
-  };
-  struct TestStruct_Large {
-    uint32_t thing1[100000];
-  };
+  std::vector<std::thread> threads;
+  threads.reserve(concurrency);
+  for (size_t i = 0; i < concurrency; ++i) {
+    threads.emplace_back(worker);
+  }
+  for (size_t i = 0; i < concurrency; ++i) {
+    threads[i].join();
+  }
+}
+
+static void make_shared_stl() {
+  std::shared_ptr<Img> sp[USER_SIZE] = {nullptr};
+  for (size_t i = 0; i < TOTAL_SIZE; ++i) {
+    sp[i%USER_SIZE] = std::make_shared<Img>();
+  }
+}
+static void make_shared_strm() {
+  std::shared_ptr<Img> sp[USER_SIZE] = {nullptr};
+  for (size_t i = 0; i < TOTAL_SIZE; ++i) {
+    sp[i%USER_SIZE] = strm::make_shared<Img>();
+    printf("%zu\n", i);
+  }
 }
 
 int main() {
-  MY_LOGD("sizeof(Img)=%zu", sizeof(Img));
-  sharedpool<Img> pool;
+  // MY_LOGD("sizeof(Img)=%zu", sizeof(Img));
+  // sharedpool<Img> pool;
   std::clock_t start, end;
 
-  {
-    start = clock();
-    std::shared_ptr<Img> spImg[USER_SIZE];
-    for (size_t i = 0; i < TOTAL_SIZE; ++i) {
-      spImg[i%USER_SIZE] = std::make_shared<Img>(i);
-      // std::shared_ptr<Img> p = std::make_shared<Img>(i);
-    }
-    end = clock();
-    printf("%d\n", end-start);
-  }
-  {
-    start = clock();
-    std::shared_ptr<Img> spImg[USER_SIZE];
-    for (size_t i = 0; i < TOTAL_SIZE; ++i) {
-      spImg[i%USER_SIZE] = strm::make_shared<Img>(i);
-      // std::shared_ptr<Img> p = strm::make_shared<Img>(i);
-    }
-    end = clock();
-    printf("%d\n", end-start);
-  }
-
   // {
-  //   struct A {
-  //     A() { MY_LOGD("A::ctor(); "); }
-  //     ~A() { MY_LOGD("A::dtor(); "); }
-  //     int val = 0;
-  //   };
-  //   struct B {
-  //     B() { MY_LOGD("B::ctor(); "); }
-  //     ~B() { MY_LOGD("B::dtor(); "); }
-  //     std::shared_ptr<A> ma;
-  //     int val = 0;
-  //   };
-
-  //   {
-  //     std::shared_ptr<B> b = strm::make_shared<B>();
-  //     b->ma = strm::make_shared<A>();
-  //     b->val = 10;
-  //     b->ma->val = 20;
-  //     B* pb = b.get();
-  //     A* pa = b->ma.get();
-
-  //     b = nullptr;
-  //     MY_LOGD("val in B : %d, 0x%p, val in A : %d, 0x%p", pb->val, pb, pa->val, pa);
+  //   start = clock();
+  //   std::shared_ptr<Img> spImg[USER_SIZE];
+  //   for (size_t i = 0; i < TOTAL_SIZE; ++i) {
+  //     spImg[i%USER_SIZE] = std::make_shared<Img>(i);
+  //     // std::shared_ptr<Img> p = std::make_shared<Img>(i);
   //   }
+  //   end = clock();
+  //   printf("%d\n", end-start);
   // }
+  // {
+  //   start = clock();
+  //   std::shared_ptr<Img> spImg[USER_SIZE];
+  //   for (size_t i = 0; i < TOTAL_SIZE; ++i) {
+  //     spImg[i%USER_SIZE] = strm::make_shared<Img>(i);
+  //     // std::shared_ptr<Img> p = strm::make_shared<Img>(i);
+  //   }
+  //   end = clock();
+  //   printf("%d\n", end-start);
+  // }
+  // {
+  //   start = clock();
+  //   run(8, 1, make_shared_stl);
+  //   end = clock();
+  //   printf("%d\n", end-start);
+  // }
+  {
+    start = clock();
+    run(8, 1, make_shared_strm);
+    end = clock();
+    printf("elapsed time = %d\n", end-start);
+  }
 
   return 0;
 }
