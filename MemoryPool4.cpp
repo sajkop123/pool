@@ -3,6 +3,7 @@
 #include <cstring>
 #include <memory>
 #include <cassert>
+#include <sstream>
 
 #include "common.h"
 #define TAG_LOG MemoryPool4
@@ -58,11 +59,11 @@ void* MemoryPool4::allocate(size_t size) {
 
     cellIdx = COUNT_NUM_TRAILING_ZEROES_UINT32(~oldOccupyBit);
     newOccupyBit = oldOccupyBit | (1UL << cellIdx);
-    {
+#ifdef DEBUG_ENABLE
       assertm(cellIdx != INVALID_CELL_INDEX, "invalid cell index");
       assertm(oldOccupyBit | INVALID_OCCUPY_BIT, "invalid old occupy bit");
       assertm(newOccupyBit | INVALID_OCCUPY_BIT, "invalid old occupy bit");
-    }
+#endif  // DEBUG_ENABLE
   } while (!arenaHeader->mOccupationBits.compare_exchange_weak(
             oldOccupyBit, newOccupyBit, std::memory_order_release));
 
@@ -72,15 +73,15 @@ void* MemoryPool4::allocate(size_t size) {
       (CellHeaderSize + arenaHeader->mCellBodySize) * cellIdx;
   CellHeader* cellHeader = reinterpret_cast<CellHeader*>(cellHeader_char);
   unsigned char* cellBody_char = cellHeader_char + CellHeaderSize;
-  {
-    MY_LOGD("return cell[idx=%u/size=%u][H:p=0x%p/guard=%llX][B:p=0x%p] "
-            "occupy(%lX/num=%u), arena.guard=%llX",
-            cellIdx, arenaHeader->mCellBodySize, cellHeader, cellHeader->mGuard, cellBody_char,
-            newOccupyBit, arenaHeader->getNumOccupiedCells(),
-            arenaHeader->mGuard);
+  MY_LOGD("return cell[idx=%u/size=%u][Header:p=0x%p/guard=%llX][Body:p=0x%p] "
+          "occupy(%lX/num=%u), arena.guard=%llX",
+          cellIdx, arenaHeader->mCellBodySize, cellHeader, cellHeader->mGuard, cellBody_char,
+          newOccupyBit, arenaHeader->getNumOccupiedCells(),
+          arenaHeader->mGuard);
+#ifdef DEBUG_ENABLE
     assertm(cellHeader->mGuard == VALID_CELL_HEADER_MARKER, "cell guard is wrong");
     assertm(arenaHeader->mGuard == VALID_ARENA_HEADER_MARKER, "arena guard is wrong");
-  }
+#endif  // DEBUG_ENABLE
   return reinterpret_cast<void*>(cellBody_char);
 }
 
@@ -186,3 +187,12 @@ MemoryPool4::GlobalState& MemoryPool4::getGlobalState() {
 
 MemoryPool4::GlobalState::~GlobalState() {
 }
+
+// // CellSizePolicy
+// size_t CellSizePolicy_PowerOf2::toCellSize(size_t size) {
+//   return TO_POW2_UINT32(size);
+// }
+
+// size_t CellSizePolicy_NoChange::toCellSize(size_t size) {
+//   return size;
+// }

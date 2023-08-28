@@ -5,12 +5,13 @@
 #include "common.h"
 #define TAG_LOG MemoryPool4
 
-#define COUNT_NUM_TRAILING_ZEROES_UINT32(bits) __builtin_ctz(bits)
-#define COUNT_NUM_TRAILING_ZEROES_UINT64(bits) __builtin_ctz(bits)
-#define COUNT_NUM_LEADING_ZEROES_UINT32(bits) __builtin_clzl(bits)
-#define COUNT_NUM_LEADING_ZEROES_UINT64(bits) __builtin_clzll(bits)
-
+/**
+ * What flexibility/customization I should make?
+ *   1. max cell size in an arena
+ *   2. strategy if all cells are exhausting in an arena
+ */
 class MemoryPool4 {
+ public:
   const static size_t MIN_CELL_BODY_SIZE = 8;
   const static size_t BYTE_ALIGNMENT = 8;
   const static uint32_t MAX_CELLS_PER_ARENA = 8;
@@ -18,8 +19,8 @@ class MemoryPool4 {
   const static uint64_t MAX_CELL_SIZE = 1ULL << MAX_CELL_SIZE_POW2_BASE;
   const static uint64_t MAX_ARENA_SIZE = 1ULL << MAX_CELL_SIZE_POW2_BASE;
   const static uint64_t OUTSIDE_SYSTEM_MARKER = 0x1234ABCD1234ABCD;
-  const static uint64_t VALID_CELL_HEADER_MARKER = 0xEFEFAAAAEFEFAAAA;
-  const static uint64_t VALID_ARENA_HEADER_MARKER = 0x8888BBBB8888BBBB;
+  const static uint64_t VALID_CELL_HEADER_MARKER = 0xFFFFAAAAFFFFAAAA;
+  const static uint64_t VALID_ARENA_HEADER_MARKER = 0xAAAA1111FFFF8888;
 
   struct GlobalState;
   struct ArenaCollection;
@@ -51,6 +52,8 @@ class MemoryPool4 {
   struct alignas(BYTE_ALIGNMENT) CellHeader {
     ArenaHeader* mpArena = nullptr;
     uint64_t mGuard = VALID_CELL_HEADER_MARKER;
+    template<typename T>
+    std::string printMemory() const;
   };
 
   struct GlobalState {
@@ -98,3 +101,36 @@ class MemoryPool4 {
     return reinterpret_cast<ArenaHeader*>(up.get());
   }
 };
+
+// struct CellSizePolicy {
+//   virtual size_t toCellSize(size_t size) = 0;
+// };
+
+// struct CellSizePolicy_PowerOf2 : public CellSizePolicy {
+//   size_t toCellSize(size_t size) override;
+// };
+
+// struct CellSizePolicy_NoChange : public CellSizePolicy {
+//   size_t toCellSize(size_t size) override;
+// };
+
+// template<class Policy>
+// struct StaticPoolPolicy {
+//   static size_t toCellSize(size_t size) {
+//     return T::toCellSize(size);
+//   }
+// };
+
+// struct GlobalMemoryPool {
+//   friend class MemoryPool4;
+//   static GlobalMemoryPool getGlobalState();
+//   GlobalMemoryPool() = delete;
+//   ~GlobalMemoryPool();
+//   GlobalMemoryPool(const GlobalMemoryPool&) = delete;
+//   GlobalMemoryPool(GlobalMemoryPool&&) = delete;
+//   MemoryPool4::ArenaCollection* getArenaCollection(size_t id);
+//   // key = sizeof(cell) align to power of 2
+//   std::array<MemoryPool4::ArenaCollection,
+//              MemoryPool4::MAX_CELL_SIZE_POW2_BASE> mArenaCollections;
+
+// };

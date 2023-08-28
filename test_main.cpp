@@ -1,44 +1,3 @@
-// // #include "Pool1.h"
-// #include "PoolSingleton.h"
-// #include "common.h"
-
-// #include <vector>
-// #include <iostream>
-
-// struct Img : public Poolable<Img> {
-//   Img(int id) : mId(id) { MY_LOGD("ctor %d", mId); }
-//   ~Img() { MY_LOGD("dtor %d", mId); }
-//   Img(const Img&) { MY_LOGD("copy"); }
-//   Img(Img&&) { MY_LOGD("move"); }
-
-//   int mId;
-// };
-
-// void* operator new(size_t size) {
-//   void *p = malloc(size);
-//   MY_LOGD("allocate Poolable%p %zu",p , size);
-//   return p;
-// }
-
-// void operator delete(void* p) {
-//   MY_LOGD("free %p",p);
-//   free(p);
-// }
-
-// int main() {
-//   // std::shared_ptr<Img> pImg;
-//   // pImg = make_shared<Img>(1);
-
-//   // int *p = new int(2);
-//   // delete(p);
-
-//   {
-//     MY_LOGD("sizeof(global_pool<Img>)=%zu", sizeof(global_pool<Img>));
-//     std::unique_ptr<Img> p = std::make_unique<Img>(1);
-//   }
-// }
-
-
 ///////////////////////////////////////////////////////////////
 // test memory pool + shared pool
 ///////////////////////////////////////////////////////////////
@@ -85,6 +44,10 @@ void run(size_t concurrency, size_t bound, FUNC&& func, Args... args) {
   }
 }
 
+static void wirte_data(void* p, size_t size) {
+  memset(p, 1, size);
+}
+
 static void make_shared_stl() {
   std::shared_ptr<Img> sp[USER_SIZE] = {nullptr};
   for (size_t i = 0; i < TOTAL_SIZE; ++i) {
@@ -103,38 +66,38 @@ int main() {
   // MY_LOGD("sizeof(Img)=%zu", sizeof(Img));
   // sharedpool<Img> pool;
   std::clock_t start, end;
-
   // {
   //   start = clock();
-  //   std::shared_ptr<Img> spImg[USER_SIZE];
-  //   for (size_t i = 0; i < TOTAL_SIZE; ++i) {
-  //     spImg[i%USER_SIZE] = std::make_shared<Img>(i);
-  //     // std::shared_ptr<Img> p = std::make_shared<Img>(i);
-  //   }
+  //   run(8, 1, make_shared_strm);
   //   end = clock();
-  //   printf("%d\n", end-start);
-  // }
-  // {
-  //   start = clock();
-  //   std::shared_ptr<Img> spImg[USER_SIZE];
-  //   for (size_t i = 0; i < TOTAL_SIZE; ++i) {
-  //     spImg[i%USER_SIZE] = strm::make_shared<Img>(i);
-  //     // std::shared_ptr<Img> p = strm::make_shared<Img>(i);
-  //   }
-  //   end = clock();
-  //   printf("%d\n", end-start);
-  // }
-  // {
-  //   start = clock();
-  //   run(8, 1, make_shared_stl);
-  //   end = clock();
-  //   printf("%d\n", end-start);
+  //   printf("elapsed time = %d\n", end-start);
   // }
   {
-    start = clock();
-    run(8, 1, make_shared_strm);
-    end = clock();
-    printf("elapsed time = %d\n", end-start);
+    struct A {
+      // std::shared_ptr<int> m;
+      int m[4];
+    };
+    // {
+    //   std::shared_ptr<A> a = std::make_shared<A>();
+    //   a->m = std::make_shared<int>(123);
+    //   std::shared_ptr<int> pm = a->m;
+    //   int* p = a->m.get();
+    //   a = nullptr;
+    //   printf("%d\n", *p);
+    //   printf("%zu\n", pm.use_count());
+    // }
+    {
+      std::shared_ptr<A> a = strm::make_shared<A>();
+      wirte_data(a.get(), sizeof(A));
+      std::shared_ptr<A> b = strm::make_shared<A>();
+      wirte_data(a.get(), sizeof(A));
+      // a->m = std::make_shared<int>(123);
+      // std::shared_ptr<int> pm = a->m;
+      // int* p = a->m.get();
+      // a = nullptr;
+      // printf("%d\n", *p);
+      // printf("%zu\n", pm.use_count());
+    }
   }
 
   return 0;
