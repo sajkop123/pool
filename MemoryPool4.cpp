@@ -20,40 +20,50 @@
 
 #define assertm(exp, msg) assert(((void)msg, exp))
 
-void* MemoryPool4::allocate(size_t size) {
-  if (size == 0) {
-    MY_LOGD("zero size allocation is not reasonable, return nullptr");
-    return nullptr;
-  }
-  uint32_t cellBodySize = 0;
-  uint32_t arenaIdx = 0;
-  cellBodySize = callCellSizeAndArenaIdx(size, arenaIdx);
 
-  GlobalState& state = getGlobalState();
-  auto& collection = state.mArenaCollections[arenaIdx];
+AllocInfo::AllocInfo(uint32_t cellBodySize,
+                     uint32_t maxCellCountPerArena)
+  : mCellBodySize(cellBodySize)
+  , mMaxCellCountPerArena(
+      calcMaxCellCountPerArena(mCellBodySize, maxCellCountPerArena))
+  , mInvalidCellIdx(mMaxCellCountPerArena)
+  , mFullCellBit((1UL << mMaxCellCountPerArena) - 1)
+  , mInvalidOccupyBit((1UL << mMaxCellCountPerArena)) {}
+
+uint32_t AllocInfo::calcMaxCellCountPerArena(uint32_t cellBodySize,
+                                             uint32_t countPerArena) {
+  uint32_t size_align8 = (cellBodySize + 7) & (~7);
+  return ((size_align8 * countPerArena) / sMinMemoryChunk) > 0 ?
+          countPerArena : (sMinMemoryChunk / cellBodySize);
+}
+
+void* MemoryPool4::allocate(const AllocInfo& info,
+                             ArenaCollection& collection) {
   // FIX(BUG?) may have race cond here. need refer mOccupyBits
   if (!collection.mRootArena) {
     std::unique_lock<std::mutex> _l(collection.mMutex);
-    collection.mRootArena = allocateArenaOfMemory(cellBodySize, &collection);
-    collection.mCellBodySize = cellBodySize;
+    collection.mRootArena = allocateArenaOfMemory(info, collection);
+    collection.mCellBodySize = info.mCellBodySize;
     collection.mNumArenas++;
   }
 
   // all cells inside the arena are occupied, allocate another one and use
   // link-list to make connection.
-  ArenaHeader* arenaHeader = getArenaHeader(collection.mRootArena);
-  uint32_t cellIdx = INVALID_CELL_INDEX;
-  uint32_t oldOccupyBit = INVALID_OCCUPY_BIT;
-  uint32_t newOccupyBit = INVALID_OCCUPY_BIT;
+  ArenaHeader* arenaHeader =
+      reinterpret_cast<ArenaHeader*>(collection.mRootArena.get());
+  uint32_t cellIdx = info.mInvalidCellIdx;
+  uint32_t oldOccupyBit = info.mInvalidOccupyBit;
+  uint32_t newOccupyBit = info.mInvalidCellIdx;
   do {
     oldOccupyBit = arenaHeader->mOccupationBits.load(std::memory_order_acquire);
 
-    while (oldOccupyBit == ALL_CELL_IN_BIT) {
+    while (oldOccupyBit == info.mFullCellBit) {
       std::unique_lock<std::mutex> _l(collection.mMutex);
       if (!arenaHeader->mNextArena) {
-        arenaHeader->mNextArena = allocateArenaOfMemory(cellBodySize, &collection);
+        arenaHeader->mNextArena = allocateArenaOfMemory(info, collection);
       }
-      arenaHeader = getArenaHeader(arenaHeader->mNextArena);
+      arenaHeader =
+          reinterpret_cast<ArenaHeader*>(collection.mRootArena.get());
       oldOccupyBit = 0;
     }
 
@@ -86,13 +96,6 @@ void* MemoryPool4::allocate(size_t size) {
 }
 
 void MemoryPool4::deallocate(void* p, size_t size) {
-  if (p == nullptr) {
-    MY_LOGD("ERROR, null data is invalid");
-    return;
-  }
-
-  // check the cell and arena are both valid
-  GlobalState& state = getGlobalState();
   unsigned char* p_char = reinterpret_cast<unsigned char*>(p);
   CellHeader* cellHeader = reinterpret_cast<CellHeader*>(p_char - CellHeaderSize);
   if (cellHeader->mGuard != VALID_CELL_HEADER_MARKER) {
@@ -112,7 +115,7 @@ void MemoryPool4::deallocate(void* p, size_t size) {
   arenaHeader->mOccupationBits &= bit;
   {
     uint32_t occupyBit = arenaHeader->mOccupationBits.load(std::memory_order_acquire);
-    MY_LOGD("user(data=0x%p/size=%zu), cell[header_ptr=0x%x], occupy(%lX/num=%u)",
+    MY_LOGD("user(data=0x%p/size=%zu), cell[header_ptr=0x%x], occupy(0x%lX/num=%u)",
             p, size, cellHeader_char,
             occupyBit, arenaHeader->getNumOccupiedCells());
   }
@@ -121,29 +124,10 @@ void MemoryPool4::deallocate(void* p, size_t size) {
 void MemoryPool4::shutdown() {
 }
 
-uint32_t MemoryPool4::callCellSizeAndArenaIdx(
-    size_t allocSize, uint32_t& arenaIdx) {
-  if (allocSize < BYTE_ALIGNMENT) {
-    allocSize = BYTE_ALIGNMENT;
-  }
-  uint32_t alloc_npow2 = static_cast<uint32_t>(allocSize);
-  uint32_t cellSizeNoHeader = TO_POW2_UINT32(alloc_npow2);
-
-  // arena index <-> cell size_wo_header =
-  // 0/8, 1/16/ 2/32, ...
-  // arenaIdx = log(size_wo_header) - log(8)
-   arenaIdx = COUNT_NUM_TRAILING_ZEROES_UINT32(cellSizeNoHeader) -
-              COUNT_NUM_TRAILING_ZEROES_UINT32(BYTE_ALIGNMENT);
-   return cellSizeNoHeader;
-}
-
 std::unique_ptr<uint8_t[]> MemoryPool4::allocateArenaOfMemory(
-    uint32_t& cellBodySize, ArenaCollection* collection) {
-  if (cellBodySize < BYTE_ALIGNMENT) {
-    cellBodySize = BYTE_ALIGNMENT;
-  }
+    const AllocInfo& info, const ArenaCollection& collection) {
   size_t memSize = ArenaHeaderSize
-                  + (CellHeaderSize + cellBodySize) * MAX_CELLS_PER_ARENA;
+                  + (CellHeaderSize + info.mCellBodySize) * MAX_CELLS_PER_ARENA;
   std::unique_ptr<uint8_t[]> memory = std::make_unique<uint8_t[]>(memSize);
   if (!memory) {
     MY_LOGD("ERROR, failed to make_unique");
@@ -153,18 +137,18 @@ std::unique_ptr<uint8_t[]> MemoryPool4::allocateArenaOfMemory(
   {
     MY_LOGD("allocate arena of memory size: %zu+(%zu+%u)*%u=%zu "
             "arena addr:0x%p - 0x%p",
-            ArenaHeaderSize, CellHeaderSize, cellBodySize, MAX_CELLS_PER_ARENA,
+            ArenaHeaderSize, CellHeaderSize, info.mCellBodySize, MAX_CELLS_PER_ARENA,
             memSize, p, p + memSize);
   }
   // set arena header
   ArenaHeader* arenaHeader = reinterpret_cast<ArenaHeader*>(p);
-  arenaHeader->mCellCapacity = MAX_CELLS_PER_ARENA;
-  arenaHeader->mCellBodySize = cellBodySize;
+  arenaHeader->mCellCapacity = info.mMaxCellCountPerArena;
+  arenaHeader->mCellBodySize = info.mCellBodySize;
   arenaHeader->mOccupationBits = 0;
-  arenaHeader->mpCollection = collection;
+  arenaHeader->mpCollection = &collection;
   arenaHeader->mCellStart = p + ArenaHeaderSize;
   arenaHeader->mCellEnd = arenaHeader->mCellStart
-                        + (CellHeaderSize + cellBodySize) * arenaHeader->mCellCapacity
+                        + (CellHeaderSize + info.mCellBodySize) * arenaHeader->mCellCapacity
                         - 1;
   arenaHeader->mNextArena = nullptr;
   arenaHeader->mGuard = VALID_ARENA_HEADER_MARKER;
@@ -172,7 +156,7 @@ std::unique_ptr<uint8_t[]> MemoryPool4::allocateArenaOfMemory(
   // set cell
   for (size_t i = 0; i < arenaHeader->mCellCapacity; ++i) {
     unsigned char* cellRaw = arenaHeader->mCellStart
-                           + (CellHeaderSize + cellBodySize) * i;
+                           + (CellHeaderSize + info.mCellBodySize) * i;
     CellHeader* cellHeader = reinterpret_cast<CellHeader*>(cellRaw);
     cellHeader->mpArena = reinterpret_cast<ArenaHeader*>(p);
     cellHeader->mGuard = VALID_CELL_HEADER_MARKER;
@@ -180,19 +164,52 @@ std::unique_ptr<uint8_t[]> MemoryPool4::allocateArenaOfMemory(
   return std::move(memory);
 }
 
-MemoryPool4::GlobalState& MemoryPool4::getGlobalState() {
-  static GlobalState state;
-  return state;
+////////////////////////////////////////////////////////////
+
+GlobalMemPool& GlobalMemPool::getInstance() {
+  static GlobalMemPool gPool;
+  return gPool;
 }
 
-MemoryPool4::GlobalState::~GlobalState() {
+GlobalMemPool::GlobalMemPool() {
+  uint32_t cellBodySize = 8;
+  uint32_t cellCountPerArena = 8;
+  for (size_t i = 0; i < MAX_ARENA_COUNT; ++i) {
+    mAllocInfo[i] = AllocInfo(cellBodySize, cellCountPerArena);
+    cellBodySize <<= 1;
+  }
 }
 
-// // CellSizePolicy
-// size_t CellSizePolicy_PowerOf2::toCellSize(size_t size) {
-//   return TO_POW2_UINT32(size);
-// }
+GlobalMemPool::~GlobalMemPool() {
+}
 
-// size_t CellSizePolicy_NoChange::toCellSize(size_t size) {
-//   return size;
-// }
+void* GlobalMemPool::allocate(size_t size) {
+  if (size == 0) {
+    MY_LOGD("zero size allocation is invalid");
+    return nullptr;
+  }
+  uint32_t cellBodySize = 0;
+  uint32_t arenaId = 0;
+  cellBodySize = calcCellSizeAndArenaId(size, arenaId);
+  return MemoryPool4::allocate(mAllocInfo[arenaId], mArenaCollections[arenaId]);
+}
+
+void GlobalMemPool::deallocate(void* data, size_t size) {
+  MemoryPool4::deallocate(data, size);
+}
+
+uint32_t GlobalMemPool::calcCellSizeAndArenaId(
+    size_t allocSize, uint32_t& arenaIdx) {
+  if (allocSize < BYTE_ALIGNMENT) {
+    allocSize = BYTE_ALIGNMENT;
+  }
+  uint32_t allocSize_mpow2 = static_cast<uint32_t>(allocSize);
+  uint32_t cellBodySize = TO_POW2_UINT32(allocSize_mpow2);
+
+  // arena index <-> cell size_wo_header =
+  // 0/8, 1/16/ 2/32, ...
+  // arenaIdx = log(size_wo_header) - log(8)
+   arenaIdx = COUNT_NUM_TRAILING_ZEROES_UINT32(cellBodySize) -
+              COUNT_NUM_TRAILING_ZEROES_UINT32(BYTE_ALIGNMENT);
+   return cellBodySize;
+}

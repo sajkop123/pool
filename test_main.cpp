@@ -75,28 +75,19 @@ int main() {
   {
     struct A {
       // std::shared_ptr<int> m;
-      int m[4];
+      int m[3];
     };
     // {
-    //   std::shared_ptr<A> a = std::make_shared<A>();
-    //   a->m = std::make_shared<int>(123);
-    //   std::shared_ptr<int> pm = a->m;
-    //   int* p = a->m.get();
-    //   a = nullptr;
-    //   printf("%d\n", *p);
-    //   printf("%zu\n", pm.use_count());
+    //   std::shared_ptr<A> a = strm::make_shared<A>();
+    //   wirte_data(a.get(), sizeof(A));
+    //   std::shared_ptr<A> b = strm::make_shared<A>();
+    //   wirte_data(a.get(), sizeof(A));
     // }
     {
-      std::shared_ptr<A> a = strm::make_shared<A>();
-      wirte_data(a.get(), sizeof(A));
-      std::shared_ptr<A> b = strm::make_shared<A>();
-      wirte_data(a.get(), sizeof(A));
-      // a->m = std::make_shared<int>(123);
-      // std::shared_ptr<int> pm = a->m;
-      // int* p = a->m.get();
-      // a = nullptr;
-      // printf("%d\n", *p);
-      // printf("%zu\n", pm.use_count());
+      strm::PoolConfig config;
+      config.mCapacity = 4;
+      strm::ObjectPool<A> pool(config);
+      auto a = pool.acquire();
     }
   }
 
