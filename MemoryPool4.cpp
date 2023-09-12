@@ -121,9 +121,6 @@ void MemoryPool4::deallocate(void* p, size_t size) {
   }
 }
 
-void MemoryPool4::shutdown() {
-}
-
 std::unique_ptr<uint8_t[]> MemoryPool4::allocateArenaOfMemory(
     const AllocInfo& info, const ArenaCollection& collection) {
   size_t memSize = ArenaHeaderSize

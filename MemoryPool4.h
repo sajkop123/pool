@@ -90,10 +90,6 @@ class MemoryPool4 {
   static std::unique_ptr<uint8_t[]>
       allocateArenaOfMemory(const AllocInfo& info,
                             const ArenaCollection& collection);
-  static ArenaHeader*
-      getArenaHeader(std::unique_ptr<uint8_t[]>& up) {
-    return reinterpret_cast<ArenaHeader*>(up.get());
-  }
 };
 
 struct GlobalMemPool {

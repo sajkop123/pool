@@ -4,6 +4,30 @@
 namespace strm {
 
 template<typename T>
+class simple_allocator {
+ public:
+  using value_type = T;
+
+  simple_allocator() = default;
+  simple_allocator(const simple_allocator&) = default;
+  simple_allocator(simple_allocator&&) = default;
+
+  template<typename U>
+  simple_allocator(const simple_allocator<U>& other) noexcept {
+  }
+
+  [[nodiscard]] T* allocate(size_t n) {
+    MY_LOGD("%zu", sizeof(T)*n);
+    return static_cast<T*>(::operator new(n*sizeof(T)));
+  }
+
+  void deallocate(T* p, size_t n) {
+    MY_LOGD("%zu", sizeof(T)*n);
+    ::free(p);
+  }
+};
+
+template<typename T>
 class sharedpool_allocator {
  public:
   using value_type = T;

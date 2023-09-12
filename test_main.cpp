@@ -77,12 +77,12 @@ int main() {
       // std::shared_ptr<int> m;
       int m[3];
     };
-    // {
-    //   std::shared_ptr<A> a = strm::make_shared<A>();
-    //   wirte_data(a.get(), sizeof(A));
-    //   std::shared_ptr<A> b = strm::make_shared<A>();
-    //   wirte_data(a.get(), sizeof(A));
-    // }
+    {
+      std::shared_ptr<A> a = strm::make_shared<A>();
+      wirte_data(a.get(), sizeof(A));
+      std::shared_ptr<A> b = strm::make_shared<A>();
+      wirte_data(a.get(), sizeof(A));
+    }
     {
       strm::PoolConfig config;
       config.mCapacity = 4;
