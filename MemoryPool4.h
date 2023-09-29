@@ -121,3 +121,4 @@ struct GlobalMemPool {
   std::array<MemoryPool4::ArenaCollection, MAX_ARENA_COUNT> mArenaCollections;
   std::array<AllocInfo, MAX_ARENA_COUNT> mAllocInfo;
 };
+

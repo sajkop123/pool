@@ -18,7 +18,14 @@
 #define TO_POW2_UINT64(n)  \
   n == 1 ? 1 : 1 << (64 - COUNT_NUM_LEADING_ZEROES_UINT64(n-1));
 
-#define assertm(exp, msg) assert(((void)msg, exp))
+
+const char* getTid() {
+  auto myid = std::this_thread::get_id();
+  std::stringstream ss;
+  ss << myid;
+  // std::string mystring = ss.str();
+  return ss.str().c_str();
+};
 
 
 AllocInfo::AllocInfo(uint32_t cellBodySize,
@@ -38,17 +45,17 @@ uint32_t AllocInfo::calcMaxCellCountPerArena(uint32_t cellBodySize,
 }
 
 void* MemoryPool4::allocate(const AllocInfo& info,
-                             ArenaCollection& collection) {
-  // FIX(BUG?) may have race cond here. need refer mOccupyBits
+                            ArenaCollection& collection) {
+  // double-checked lock pattern - avoid allocate twice.
   if (!collection.mRootArena) {
     std::unique_lock<std::mutex> _l(collection.mMutex);
-    collection.mRootArena = allocateArenaOfMemory(info, collection);
-    collection.mCellBodySize = info.mCellBodySize;
-    collection.mNumArenas++;
+    if (!collection.mRootArena) {
+      collection.mRootArena = allocateArenaOfMemory(info, collection);
+      collection.mCellBodySize = info.mCellBodySize;
+      collection.mNumArenas++;
+    }
   }
 
-  // all cells inside the arena are occupied, allocate another one and use
-  // link-list to make connection.
   ArenaHeader* arenaHeader =
       reinterpret_cast<ArenaHeader*>(collection.mRootArena.get());
   uint32_t cellIdx = info.mInvalidCellIdx;
@@ -57,22 +64,26 @@ void* MemoryPool4::allocate(const AllocInfo& info,
   do {
     oldOccupyBit = arenaHeader->mOccupationBits.load(std::memory_order_acquire);
 
+    // all cells inside the arena are occupied, allocate another one and use
+    // link-list to make connection.
     while (oldOccupyBit == info.mFullCellBit) {
-      std::unique_lock<std::mutex> _l(collection.mMutex);
       if (!arenaHeader->mNextArena) {
-        arenaHeader->mNextArena = allocateArenaOfMemory(info, collection);
+        std::unique_lock<std::mutex> _l(collection.mMutex);
+        if (!arenaHeader->mNextArena) {
+          arenaHeader->mNextArena = allocateArenaOfMemory(info, collection);
+        }
+        arenaHeader =
+            reinterpret_cast<ArenaHeader*>(collection.mRootArena.get());
+        oldOccupyBit = 0;
       }
-      arenaHeader =
-          reinterpret_cast<ArenaHeader*>(collection.mRootArena.get());
-      oldOccupyBit = 0;
     }
 
     cellIdx = COUNT_NUM_TRAILING_ZEROES_UINT32(~oldOccupyBit);
     newOccupyBit = oldOccupyBit | (1UL << cellIdx);
 #ifdef DEBUG_ENABLE
-      assertm(cellIdx != INVALID_CELL_INDEX, "invalid cell index");
-      assertm(oldOccupyBit | INVALID_OCCUPY_BIT, "invalid old occupy bit");
-      assertm(newOccupyBit | INVALID_OCCUPY_BIT, "invalid old occupy bit");
+    assertm(cellIdx != INVALID_CELL_INDEX, "invalid cell index");
+    assertm(oldOccupyBit | INVALID_OCCUPY_BIT, "invalid old occupy bit");
+    assertm(newOccupyBit | INVALID_OCCUPY_BIT, "invalid old occupy bit");
 #endif  // DEBUG_ENABLE
   } while (!arenaHeader->mOccupationBits.compare_exchange_weak(
             oldOccupyBit, newOccupyBit, std::memory_order_release));
@@ -83,14 +94,13 @@ void* MemoryPool4::allocate(const AllocInfo& info,
       (CellHeaderSize + arenaHeader->mCellBodySize) * cellIdx;
   CellHeader* cellHeader = reinterpret_cast<CellHeader*>(cellHeader_char);
   unsigned char* cellBody_char = cellHeader_char + CellHeaderSize;
-  MY_LOGD("return cell[idx=%u/size=%u][Header:p=0x%p/guard=%llX][Body:p=0x%p] "
-          "occupy(%lX/num=%u), arena.guard=%llX",
-          cellIdx, arenaHeader->mCellBodySize, cellHeader, cellHeader->mGuard, cellBody_char,
-          newOccupyBit, arenaHeader->getNumOccupiedCells(),
-          arenaHeader->mGuard);
+  MY_LOGI(" %d return cell[id=%u/size=%u][Header:p=0x%p][Body:p=0x%p] "
+          "occupy(0x%lX/nums=%u)",
+          getTid(), cellIdx, arenaHeader->mCellBodySize, cellHeader, cellBody_char,
+          newOccupyBit, arenaHeader->getNumOccupiedCells());
 #ifdef DEBUG_ENABLE
-    assertm(cellHeader->mGuard == VALID_CELL_HEADER_MARKER, "cell guard is wrong");
-    assertm(arenaHeader->mGuard == VALID_ARENA_HEADER_MARKER, "arena guard is wrong");
+  assertm(cellHeader->mGuard == VALID_CELL_HEADER_MARKER, "cell guard is wrong");
+  assertm(arenaHeader->mGuard == VALID_ARENA_HEADER_MARKER, "arena guard is wrong");
 #endif  // DEBUG_ENABLE
   return reinterpret_cast<void*>(cellBody_char);
 }
@@ -115,10 +125,15 @@ void MemoryPool4::deallocate(void* p, size_t size) {
   arenaHeader->mOccupationBits &= bit;
   {
     uint32_t occupyBit = arenaHeader->mOccupationBits.load(std::memory_order_acquire);
-    MY_LOGD("user(data=0x%p/size=%zu), cell[header_ptr=0x%x], occupy(0x%lX/num=%u)",
-            p, size, cellHeader_char,
+    MY_LOGI(" %d user(data=0x%p/size=%zu), cell[header_ptr=0x%p/id=%lu], occupy(0x%lX/num=%u)",
+            getTid(), p, size, cellHeader_char, bitPosOfCell,
             occupyBit, arenaHeader->getNumOccupiedCells());
   }
+
+#ifdef DEBUG_ENABLE
+  assertm(cellHeader->mGuard == VALID_CELL_HEADER_MARKER, "cell guard is wrong");
+  assertm(arenaHeader->mGuard == VALID_ARENA_HEADER_MARKER, "arena guard is wrong");
+#endif  // DEBUG_ENABLE
 }
 
 std::unique_ptr<uint8_t[]> MemoryPool4::allocateArenaOfMemory(

@@ -63,32 +63,30 @@ static void make_shared_strm() {
 }
 
 int main() {
-  // MY_LOGD("sizeof(Img)=%zu", sizeof(Img));
-  // sharedpool<Img> pool;
-  std::clock_t start, end;
+  struct A {
+    // std::shared_ptr<int> m;
+    int m[3];
+  };
   // {
-  //   start = clock();
-  //   run(8, 1, make_shared_strm);
-  //   end = clock();
-  //   printf("elapsed time = %d\n", end-start);
+  //   std::shared_ptr<A> a = strm::make_shared<A>();
+  //   wirte_data(a.get(), sizeof(A));
+  //   std::shared_ptr<A> b = strm::make_shared<A>();
+  //   wirte_data(a.get(), sizeof(A));
   // }
   {
-    struct A {
-      // std::shared_ptr<int> m;
-      int m[3];
+    strm::PoolConfig config;
+    config.mCapacity = 4;
+    strm::ObjectPool<A> pool(config);
+    auto _f = [&pool](int a, int b, int c) {
+      auto p = pool.acquire();
+      p->m[0] = a;
+      p->m[1] = b;
+      p->m[2] = c;
+      assertm(p->m[0] == a && p->m[1] == b && p->m[2] == c,
+              "value not match");
+      std::this_thread::sleep_for(std::chrono::milliseconds(500));
     };
-    {
-      std::shared_ptr<A> a = strm::make_shared<A>();
-      wirte_data(a.get(), sizeof(A));
-      std::shared_ptr<A> b = strm::make_shared<A>();
-      wirte_data(a.get(), sizeof(A));
-    }
-    {
-      strm::PoolConfig config;
-      config.mCapacity = 4;
-      strm::ObjectPool<A> pool(config);
-      auto a = pool.acquire();
-    }
+    run(8, 4, _f, 1, 2, 3);
   }
 
   return 0;
