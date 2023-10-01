@@ -66,27 +66,66 @@ int main() {
   struct A {
     // std::shared_ptr<int> m;
     int m[3];
+    A(int a) {
+      m[0] = a;
+      m[1] = a;
+      m[2] = a;
+    }
   };
+
+  // A* p = nullptr;
   // {
-  //   std::shared_ptr<A> a = strm::make_shared<A>();
-  //   wirte_data(a.get(), sizeof(A));
-  //   std::shared_ptr<A> b = strm::make_shared<A>();
-  //   wirte_data(a.get(), sizeof(A));
+  //   std::shared_ptr<A> a = std::make_shared<A>(1);
+  //   p = a.get();
+  //   std::shared_ptr<A> a1 = strm::make_shared<A>(2);
+  //   std::shared_ptr<A> a2 = strm::make_shared<A>(3);
   // }
+  // MY_LOGI("%d, %d, %d", p->m[0], p->m[1], p->m[2]);
+
+
+  // {
+  //   strm::PoolConfig config;
+  //   config.mCapacity = 4;
+  //   strm::ObjectPool<A> pool(config);
+  //   auto _f = [&pool](int a, int b, int c) {
+  //     auto p = pool.acquire();
+  //     p->m[0] = a;
+  //     p->m[1] = b;
+  //     p->m[2] = c;
+  //     assertm(p->m[0] == a && p->m[1] == b && p->m[2] == c,
+  //             "value not match");
+  //     std::this_thread::sleep_for(std::chrono::milliseconds(500));
+  //   };
+  //   run(8, 4, _f, 1, 2, 3);
+  // }
+
+  // {
+  //   int concurrency = 8;
+  //   int loop = 10;
+
+  //   auto _l2 = [&loop]() {
+  //     for (int i = 0; i < loop; ++i) {
+  //       auto p = strm::make_shared<A>(i);
+  //       std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  //       assertm(p->m[0] == i && p->m[1] == i && p->m[2] == i,
+  //               "value not match");
+  //     }
+  //   };
+
+  //   std::vector<std::thread> threads;
+  //   threads.reserve(concurrency);
+  //   for (int i = 0; i < concurrency; ++i) {
+  //     threads.emplace_back(_l2);
+  //   }
+  //   for (size_t i = 0; i < concurrency; ++i) {
+  //     threads[i].join();
+  //   }
+  // }
+
   {
-    strm::PoolConfig config;
-    config.mCapacity = 4;
-    strm::ObjectPool<A> pool(config);
-    auto _f = [&pool](int a, int b, int c) {
-      auto p = pool.acquire();
-      p->m[0] = a;
-      p->m[1] = b;
-      p->m[2] = c;
-      assertm(p->m[0] == a && p->m[1] == b && p->m[2] == c,
-              "value not match");
-      std::this_thread::sleep_for(std::chrono::milliseconds(500));
-    };
-    run(8, 4, _f, 1, 2, 3);
+    strm::Debug debugA;
+    debugA.mUserName = std::string("asdasd");
+    std::shared_ptr<A> p = strm::make_shared2<A>(debugA, 10);
   }
 
   return 0;

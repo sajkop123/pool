@@ -4,6 +4,11 @@
 namespace strm {
 
 template<typename T>
+void func(T t) {
+  puts(__PRETTY_FUNCTION__);
+}
+
+template<typename T>
 class simple_allocator {
  public:
   using value_type = T;
@@ -50,6 +55,35 @@ class sharedpool_allocator {
   }
 };
 
+struct Debug {
+  std::string mUserName;
+};
+
+
+template<typename T>
+class sharedpool_allocator_debug {
+ public:
+  using value_type = T;
+
+  sharedpool_allocator_debug() = default;
+  sharedpool_allocator_debug(const sharedpool_allocator_debug&) = default;
+  sharedpool_allocator_debug(sharedpool_allocator_debug&&) = default;
+
+  template<typename U>
+  sharedpool_allocator_debug(const sharedpool_allocator_debug<U>& other) noexcept {
+  }
+
+  [[nodiscard]] T* allocate(size_t n) {
+    T* p = static_cast<T*>(GlobalMemPool::getInstance().allocate(n * sizeof(T)));
+    return p;
+  }
+
+  void deallocate(T* p, size_t n) {
+    GlobalMemPool::getInstance().deallocate((void*)p, n*sizeof(T));
+  }
+};
+
+
 template<class _Tp, typename... _Args>
 inline std::shared_ptr<_Tp>
 make_shared(_Args&&... __args) {
@@ -58,6 +92,23 @@ make_shared(_Args&&... __args) {
   return p;
 }
 
+
+template<class _Tp, typename... _Args>
+inline std::shared_ptr<_Tp>
+make_shared2(const Debug& debug, _Args&&... __args) {
+  struct _Tp_Debug : public _Tp, public Debug {
+    using _Tp::_Tp;
+  };
+  auto p = std::allocate_shared<_Tp_Debug>(
+               sharedpool_allocator_debug<_Tp_Debug>(),
+               std::forward<_Args>(__args)...);
+  p->mUserName = debug.mUserName;
+  std::shared_ptr<_Tp> p_res = std::shared_ptr<_Tp>(p.get(),
+      [p](_Tp* raw_p) {
+        MY_LOGI("%s", p->mUserName.c_str());
+      });
+  return p;
+}
 struct PoolConfig {
   uint32_t mCapacity;
 };
